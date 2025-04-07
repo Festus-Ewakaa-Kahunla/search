@@ -1,7 +1,13 @@
 {
-  "name": "fsearch",
+  "name": "search",
   "version": "0.1.0",
   "private": true,
+  "author": {
+    "name": "Festus Kahunla",
+    "email": "festus@kahunla.com",
+    "url": "https://search.kahunla.com"
+  },
+  "description": "A modern search engine powered by Google's Gemini AI",
   "scripts": {
     "dev": "next dev",
     "build": "next build",

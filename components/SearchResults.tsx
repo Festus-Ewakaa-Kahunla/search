@@ -163,16 +163,16 @@ export function SearchResults({
               rehypePlugins={[rehypeRaw, rehypeKatex]}
               components={{
                 // This ensures proper styling of code blocks
-                code: ({node, inline, className, children, ...props}) => {
+                code: (props) => {
                   return (
-                    <code className={className} {...props}>
-                      {children}
+                    <code className={props.className || ''}>
+                      {props.children}
                     </code>
                   )
                 },
                 // Custom link component to ensure proper styling
-                a: ({node, children, ...props}) => {
-                  return <a className="text-primary hover:text-primary/80" {...props}>{children}</a>
+                a: (props) => {
+                  return <a className="text-primary hover:text-primary/80" href={props.href} target={props.target}>{props.children}</a>
                 }
               }}
             >
