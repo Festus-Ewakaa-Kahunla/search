@@ -1,0 +1,11 @@
+<svg width="52" height="52" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <circle cx="11" cy="11" r="8" stroke="url(#paint0_linear_search)" stroke-width="2" fill="none" />
+  <line x1="17" y1="17" x2="21" y2="21" stroke="url(#paint0_linear_search)" stroke-width="2.5" stroke-linecap="round" />
+  <defs>
+    <linearGradient id="paint0_linear_search" x1="2" y1="22" x2="22" y2="2" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#14B850"/>
+      <stop offset="0.524208" stop-color="#2BD975"/>
+      <stop offset="1" stop-color="#14B850"/>
+    </linearGradient>
+  </defs>
+</svg>
