@@ -29,6 +29,16 @@ function SearchPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   
+  // Extract query from URL, handling both initial load and subsequent navigation
+  const getQueryFromUrl = () => {
+    return searchParams.get('q') || '';
+  };
+  
+  // Get current query for localStorage key
+  const currentQuery = getQueryFromUrl();
+  const localStorageKey = `fsearch-conversation-${currentQuery}`;
+  
+  // Initialize state with values from localStorage if available
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [currentResults, setCurrentResults] = useState<any>(null);
   const [originalQuery, setOriginalQuery] = useState<string | null>(null);
@@ -36,10 +46,25 @@ function SearchPageContent() {
   const [followUpQuery, setFollowUpQuery] = useState<string | null>(null);
   const [conversationHistory, setConversationHistory] = useState<ChatHistoryEntry[]>([]);
   
-  // Extract query from URL, handling both initial load and subsequent navigation
-  const getQueryFromUrl = () => {
-    return searchParams.get('q') || '';
-  };
+  // Load state from localStorage on initial render
+  useEffect(() => {
+    if (typeof window !== 'undefined' && currentQuery) {
+      try {
+        const savedState = localStorage.getItem(localStorageKey);
+        if (savedState) {
+          const parsedState = JSON.parse(savedState);
+          setSessionId(parsedState.sessionId || null);
+          setCurrentResults(parsedState.currentResults || null);
+          setOriginalQuery(parsedState.originalQuery || null);
+          setIsFollowUp(parsedState.isFollowUp || false);
+          setConversationHistory(parsedState.conversationHistory || []);
+          console.log('Loaded conversation state from localStorage:', parsedState);
+        }
+      } catch (error) {
+        console.error('Error loading state from localStorage:', error);
+      }
+    }
+  }, [currentQuery, localStorageKey]);
   
   const [searchQuery, setSearchQuery] = useState(getQueryFromUrl);
   const [refetchCounter, setRefetchCounter] = useState(0);
@@ -190,6 +215,29 @@ function SearchPageContent() {
   useEffect(() => {
     const query = getQueryFromUrl();
     if (query && query !== searchQuery) {
+      // Check if we have saved state for this query
+      if (typeof window !== 'undefined') {
+        // Use the same localStorage key format for consistency
+        const queryLocalStorageKey = `fsearch-conversation-${query}`;
+        const savedState = localStorage.getItem(queryLocalStorageKey);
+        if (savedState) {
+          try {
+            const parsedState = JSON.parse(savedState);
+            setSessionId(parsedState.sessionId || null);
+            setCurrentResults(parsedState.currentResults || null);
+            setOriginalQuery(parsedState.originalQuery || null);
+            setIsFollowUp(parsedState.isFollowUp || false);
+            setConversationHistory(parsedState.conversationHistory || []);
+            setSearchQuery(query);
+            console.log('Loaded conversation state for new query:', parsedState);
+            return; // Don't clear state if we've loaded from localStorage
+          } catch (error) {
+            console.error('Error loading state for new query:', error);
+          }
+        }
+      }
+      
+      // If no saved state or error loading, clear state
       setSessionId(null); // Clear session on URL change
       setOriginalQuery(null); // Clear original query
       setIsFollowUp(false); // Reset follow-up state
@@ -198,6 +246,25 @@ function SearchPageContent() {
     }
   }, [searchParams]);
 
+  // Save state to localStorage whenever it changes
+  useEffect(() => {
+    if (typeof window !== 'undefined' && currentQuery && sessionId) {
+      try {
+        const stateToSave = {
+          sessionId,
+          currentResults,
+          originalQuery,
+          isFollowUp,
+          conversationHistory
+        };
+        localStorage.setItem(localStorageKey, JSON.stringify(stateToSave));
+        console.log('Saved conversation state to localStorage:', stateToSave);
+      } catch (error) {
+        console.error('Error saving state to localStorage:', error);
+      }
+    }
+  }, [sessionId, currentResults, originalQuery, isFollowUp, conversationHistory, currentQuery, localStorageKey]);
+  
   // Use currentResults if available, otherwise fall back to data from useQuery
   const displayResults = currentResults || data;
 

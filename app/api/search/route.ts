@@ -1,94 +1,47 @@
 // app/api/search/route.ts
 import { NextResponse } from "next/server";
-import { getGeminiModel, formatResponseToMarkdown } from "@/lib/gemini";
-import { GroundingMetadata, ChatHistoryEntry, Source } from "@/lib/types";
+import { ChatHistoryEntry } from "@/lib/types";
+import { getAISearchService } from "@/lib/services/service-factory";
+import { validateSearchParams } from "@/lib/api/validators";
 
 export async function GET(request: Request) {
+  // Extract query parameters
   const { searchParams } = new URL(request.url);
   const query = searchParams.get("q");
   const apiKey = searchParams.get("apiKey");
 
-  if (!query) {
-    return NextResponse.json({ message: "Query parameter 'q' is required" }, { status: 400 });
-  }
-
-  if (!apiKey) {
-    return NextResponse.json({ message: "API key is required to use this search function. Please provide your Gemini API key in settings." }, { status: 400 });
+  // Validate required parameters (SRP: moved validation to separate module)
+  const validation = validateSearchParams(query, apiKey);
+  if (!validation.valid) {
+    return validation.response;
   }
 
   try {
-    // Validate API key was provided
-    if (!apiKey || apiKey.trim() === '') {
-      return NextResponse.json({ message: "API key is required to use this search function. Please provide your Gemini API key in settings." }, { status: 400 });
-    }
+    // Get AI search service (DIP: using abstraction instead of direct implementation)
+    const searchService = getAISearchService();
     
-    // Initialize Gemini model with provided API key
-    const model = getGeminiModel(apiKey);
+    // Perform search (simplified with our service layer)
+    const searchResponse = await searchService.search(query!, apiKey!);
     
-    // Create a new chat session with search capabilities
-    const chat = model.startChat({
-      tools: [
-        {
-          // @ts-ignore - google_search is a valid tool but not typed in the SDK yet
-          google_search: {},
-        },
-      ],
-    });
-
-    // Send the search query
-    const result = await chat.sendMessage(query);
-    const response = await result.response;
-    const text = response.text();
-
-    // Format the response into markdown/HTML
-    const formattedText = await formatResponseToMarkdown(text);
-
-    // Extract sources from grounding metadata
-    const sourceMap = new Map<string, Source>();
-    const metadata = response.candidates?.[0]?.groundingMetadata as unknown as GroundingMetadata;
-    if (metadata) {
-      const chunks = metadata.groundingChunks || [];
-      const supports = metadata.groundingSupports || [];
-      chunks.forEach((chunk: any, index: number) => {
-        if (chunk.web?.uri && chunk.web?.title) {
-          const url = chunk.web.uri;
-          if (!sourceMap.has(url)) {
-            const snippets = supports
-              .filter((support: any) =>
-                support.groundingChunkIndices.includes(index)
-              )
-              .map((support: any) => support.segment.text)
-              .join(" ");
-            sourceMap.set(url, {
-              title: chunk.web.title,
-              url,
-              snippet: snippets || "",
-            });
-          }
-        }
-      });
-    }
-    const sources = Array.from(sourceMap.values());
-
-    // Generate a unique session ID that will be used client-side
+    // Generate a unique session ID
     const sessionId = Math.random().toString(36).substring(7);
     
     // Create a history array for this conversation
     const history: ChatHistoryEntry[] = [
-      { role: 'user', content: query },
-      { role: 'assistant', content: text },
+      { role: 'user', content: query! },
+      { role: 'assistant', content: searchResponse.text },
     ];
 
-    // Return all necessary data for client-side storage
+    // Return all necessary data for client-side storage (OCP: standardized response structure)
     return NextResponse.json({
       sessionId,
       query,
-      summary: formattedText,
-      sources,
+      summary: searchResponse.formattedText,
+      sources: searchResponse.sources,
       history,
       raw: {
         // Include the raw AI responses for debugging or advanced use cases
-        modelResponse: text,
+        modelResponse: searchResponse.text,
       },
       metadata: {
         model: "gemini-2.0-flash-exp",
@@ -97,9 +50,16 @@ export async function GET(request: Request) {
     });
   } catch (error: any) {
     console.error("Search error:", error);
+    
+    // Error handling with specific status codes based on error type
     if (error.message?.includes("API key")) {
-      return NextResponse.json({ message: "Invalid API key. Please check your settings and try again." }, { status: 401 });
+      return NextResponse.json({ 
+        message: "Invalid API key. Please check your settings and try again." 
+      }, { status: 401 });
     }
-    return NextResponse.json({ message: error.message || "An error occurred while processing your search" }, { status: 500 });
+    
+    return NextResponse.json({ 
+      message: error.message || "An error occurred while processing your search" 
+    }, { status: 500 });
   }
 }
