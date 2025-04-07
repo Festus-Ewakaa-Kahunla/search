@@ -9,6 +9,14 @@ import { motion } from 'framer-motion';
 import { SourceList } from '@/components/SourceList';
 import { Logo } from '@/components/Logo';
 
+// Rich markdown rendering components
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import remarkMath from 'remark-math';
+import rehypeRaw from 'rehype-raw';
+import rehypeKatex from 'rehype-katex';
+import 'katex/dist/katex.min.css';
+
 interface SearchResultsProps {
   query: string;
   results: any;
@@ -136,23 +144,41 @@ export function SearchResults({
           transition={{ delay: 0.3, duration: 0.4 }}
           className="py-4 px-8"
         >
-          <div
-            className={cn(
-              "prose prose-slate max-w-none text-white font-inter",
-              "prose-headings:font-semibold prose-headings:mb-4 prose-headings:text-white prose-headings:tracking-tight",
-              "prose-h2:text-2xl prose-h2:mt-8 prose-h2:border-b prose-h2:pb-2 prose-h2:border-border prose-h2:text-white",
-              "prose-h3:text-xl prose-h3:mt-6 prose-h3:text-white",
-              "prose-p:text-base prose-p:leading-7 prose-p:my-4 prose-p:text-white",
-              "prose-ul:my-6 prose-ul:list-disc prose-ul:pl-6",
-              "prose-li:my-2 prose-li:text-white prose-li:marker:text-primary",
-              "prose-strong:font-semibold prose-strong:text-white",
-              "prose-a:text-primary prose-a:no-underline hover:prose-a:text-primary/80",
-              "tracking-tight"
-            )}
-            dangerouslySetInnerHTML={{ 
-              __html: results.summary
-            }}
-          />
+          <div className={cn(
+            "prose prose-slate max-w-none text-white font-inter",
+            "prose-headings:font-semibold prose-headings:mb-4 prose-headings:text-white prose-headings:tracking-tight",
+            "prose-h2:text-2xl prose-h2:mt-8 prose-h2:border-b prose-h2:pb-2 prose-h2:border-border prose-h2:text-white",
+            "prose-h3:text-xl prose-h3:mt-6 prose-h3:text-white",
+            "prose-p:text-base prose-p:leading-7 prose-p:my-4 prose-p:text-white",
+            "prose-ul:my-6 prose-ul:list-disc prose-ul:pl-6",
+            "prose-li:my-2 prose-li:text-white prose-li:marker:text-primary",
+            "prose-strong:font-semibold prose-strong:text-white",
+            "prose-a:text-primary prose-a:no-underline hover:prose-a:text-primary/80",
+            "prose-code:bg-muted/50 prose-code:p-1 prose-code:rounded prose-code:text-sm",
+            "prose-pre:bg-muted/50 prose-pre:text-sm",
+            "tracking-tight"
+          )}>
+            <ReactMarkdown
+              remarkPlugins={[remarkGfm, remarkMath]}
+              rehypePlugins={[rehypeRaw, rehypeKatex]}
+              components={{
+                // This ensures proper styling of code blocks
+                code: ({node, inline, className, children, ...props}) => {
+                  return (
+                    <code className={className} {...props}>
+                      {children}
+                    </code>
+                  )
+                },
+                // Custom link component to ensure proper styling
+                a: ({node, children, ...props}) => {
+                  return <a className="text-primary hover:text-primary/80" {...props}>{children}</a>
+                }
+              }}
+            >
+              {results.summary}
+            </ReactMarkdown>
+          </div>
         </motion.div>
       </Card>
     </div>
