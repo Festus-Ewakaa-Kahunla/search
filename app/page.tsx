@@ -3,6 +3,7 @@
 // app/page.tsx - matches search-main/client/src/pages/Home.tsx
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+
 import { Search, Star } from 'lucide-react';
 import { Logo } from '@/components/Logo';
 import { motion } from 'framer-motion';
@@ -126,9 +127,13 @@ export default function Home() {
           </div>
         </motion.form>
         
-        {/* Copyright notice */}
-        <div className="mt-6 text-center opacity-50 text-xs">
-          <p>&copy; 2025 All Rights Reserved. Festus Kahunla</p>
+        {/* Footer with links and copyright */}
+        <div className="mt-6 text-center text-xs">
+          <div className="flex justify-center space-x-4 mb-2">
+            <a href="/help" className="text-primary/70 hover:text-primary transition-colors">Help Guide</a>
+            <a href="/privacy" className="text-primary/70 hover:text-primary transition-colors">Privacy Policy</a>
+          </div>
+          <p className="opacity-50">&copy; 2025 All Rights Reserved. Festus Kahunla</p>
         </div>
       </div>
     </div>
