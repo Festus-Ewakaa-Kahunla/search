@@ -39,6 +39,7 @@ export interface SearchResult {
   summary: string;
   sources: Source[];
   history?: ChatHistoryEntry[];
+  newHistoryEntries?: ChatHistoryEntry[];
   raw?: {
     modelResponse: string;
   };

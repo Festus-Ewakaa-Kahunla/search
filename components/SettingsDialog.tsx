@@ -6,6 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 import { Settings, Info, AlertCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { getSettingsService } from '@/lib/services/settings-service';
 
 export function SettingsDialog() {
   const [apiKey, setApiKey] = useState('');
@@ -14,16 +15,19 @@ export function SettingsDialog() {
   
   // We no longer auto-open settings, users will click the settings button when they need it
 
-  // Load API key from localStorage when component mounts
+  // Initialize settings service
+  const settingsService = getSettingsService();
+  
+  // Load API key from settings service when component mounts
   useEffect(() => {
-    const savedApiKey = localStorage.getItem('geminiApiKey') || '';
+    const savedApiKey = settingsService.getApiKey() || '';
     setApiKey(savedApiKey);
   }, []);
 
   // Handle saving the API key
   const handleSaveApiKey = () => {
-    // Basic validation for Gemini API key format (starts with "AIza")
-    if (apiKey && !apiKey.startsWith('AIza')) {
+    // Validate the API key using the settings service
+    if (apiKey && !settingsService.validateApiKey(apiKey)) {
       toast({
         variant: "destructive",
         title: "Invalid API Key",
@@ -32,8 +36,8 @@ export function SettingsDialog() {
       return;
     }
 
-    // Save to localStorage
-    localStorage.setItem('geminiApiKey', apiKey);
+    // Save using the settings service
+    settingsService.saveApiKey(apiKey);
     toast({
       title: "Settings Saved",
       description: apiKey ? 'API key saved successfully' : 'Default API key will be used'
@@ -43,7 +47,7 @@ export function SettingsDialog() {
 
   const handleClearApiKey = () => {
     setApiKey('');
-    localStorage.removeItem('geminiApiKey');
+    settingsService.clearApiKey();
     toast({
       title: "API Key Removed",
       description: 'The application will use the default API key.'

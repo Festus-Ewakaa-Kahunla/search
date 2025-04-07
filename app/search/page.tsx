@@ -13,6 +13,11 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { SourceList } from '@/components/SourceList';
 import { ChatHistoryEntry } from '@/lib/types';
 
+// Import our new service abstractions
+import { getConversationStateManager, ConversationState } from '@/lib/services/conversation-service';
+import { getSearchClient, SearchResult, FollowUpResult } from '@/lib/services/search-client';
+import { getSettingsService } from '@/lib/services/settings-service';
+
 // Create a client
 const queryClient = new QueryClient();
 
@@ -29,16 +34,20 @@ function SearchPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   
+  // Initialize our services
+  const conversationManager = getConversationStateManager();
+  const searchClient = getSearchClient();
+  const settingsService = getSettingsService();
+
   // Extract query from URL, handling both initial load and subsequent navigation
   const getQueryFromUrl = () => {
     return searchParams.get('q') || '';
   };
   
-  // Get current query for localStorage key
+  // Get current query
   const currentQuery = getQueryFromUrl();
-  const localStorageKey = `fsearch-conversation-${currentQuery}`;
   
-  // Initialize state with values from localStorage if available
+  // Initialize state for search page
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [currentResults, setCurrentResults] = useState<any>(null);
   const [originalQuery, setOriginalQuery] = useState<string | null>(null);
@@ -46,137 +55,100 @@ function SearchPageContent() {
   const [followUpQuery, setFollowUpQuery] = useState<string | null>(null);
   const [conversationHistory, setConversationHistory] = useState<ChatHistoryEntry[]>([]);
   
-  // Load state from localStorage on initial render
+  // Load state from conversation manager on initial render
   useEffect(() => {
-    if (typeof window !== 'undefined' && currentQuery) {
-      try {
-        const savedState = localStorage.getItem(localStorageKey);
-        if (savedState) {
-          const parsedState = JSON.parse(savedState);
-          setSessionId(parsedState.sessionId || null);
-          setCurrentResults(parsedState.currentResults || null);
-          setOriginalQuery(parsedState.originalQuery || null);
-          setIsFollowUp(parsedState.isFollowUp || false);
-          setConversationHistory(parsedState.conversationHistory || []);
-          console.log('Loaded conversation state from localStorage:', parsedState);
-        }
-      } catch (error) {
-        console.error('Error loading state from localStorage:', error);
+    if (currentQuery) {
+      const savedState = conversationManager.loadConversationState(currentQuery);
+      if (savedState) {
+        setSessionId(savedState.sessionId);
+        setCurrentResults(savedState.currentResults);
+        setOriginalQuery(savedState.originalQuery);
+        setIsFollowUp(savedState.isFollowUp);
+        setConversationHistory(savedState.conversationHistory);
+        console.log('Loaded conversation state:', savedState);
       }
     }
-  }, [currentQuery, localStorageKey]);
+  }, [currentQuery]);
   
   const [searchQuery, setSearchQuery] = useState(getQueryFromUrl);
   const [refetchCounter, setRefetchCounter] = useState(0);
-
+  
+  // Use React Query to handle search API calls
   const { data, isLoading, error } = useQuery({
     queryKey: ['search', searchQuery, refetchCounter],
     queryFn: async () => {
+      // If searchQuery is empty, return early
       if (!searchQuery) return null;
       
-      // Get the user's API key from localStorage if available
-      const userApiKey = localStorage.getItem('geminiApiKey');
+      // Get the user's API key from settings service
+      const userApiKey = settingsService.getApiKey();
       
-      // If no API key is found, show an error that prompts the user to set their API key
-      if (!userApiKey) {
-        throw new Error('API key is required to use this search function. Please provide your Gemini API key in settings.');
-      }
-      
-      const apiKeyParam = userApiKey ? `&apiKey=${encodeURIComponent(userApiKey)}` : '';
-      
-      const response = await fetch(`/api/search?q=${encodeURIComponent(searchQuery)}${apiKeyParam}`);
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(errorText || 'Search failed');
-      }
-      const result = await response.json();
-      console.log('Search API Response:', JSON.stringify(result, null, 2));
-      if (result.sessionId) {
-        setSessionId(result.sessionId);
-        setCurrentResults(result);
-        if (!originalQuery) {
-          setOriginalQuery(searchQuery);
-        }
-        setIsFollowUp(false);
+      try {
+        // Use search client service instead of direct fetch
+        const result = await searchClient.search(searchQuery, userApiKey || undefined);
+        console.log('Search API Response:', JSON.stringify(result, null, 2));
         
-        // Store conversation history
-        if (result.history && Array.isArray(result.history)) {
-          console.log('Storing initial conversation history:', result.history);
-          setConversationHistory(result.history);
-        }
-      }
-      return result;
-    },
-    enabled: !!searchQuery,
-  });
-
-  // Follow-up mutation
-  const followUpMutation = useMutation({
-    mutationFn: async (followUpQuery: string) => {
-      // Get the user's API key from localStorage if available
-      const userApiKey = localStorage.getItem('geminiApiKey');
-      
-      if (!sessionId) {
-        const apiKeyParam = userApiKey ? `&apiKey=${encodeURIComponent(userApiKey)}` : '';
-        const response = await fetch(`/api/search?q=${encodeURIComponent(followUpQuery)}${apiKeyParam}`);
-        if (!response.ok) {
-          const errorText = await response.text();
-          throw new Error(errorText || 'Search failed');
-        }
-        const result = await response.json();
-        console.log('New Search API Response:', JSON.stringify(result, null, 2));
+        // Store necessary state from search result
         if (result.sessionId) {
           setSessionId(result.sessionId);
           setOriginalQuery(searchQuery);
-          setIsFollowUp(false);
           
-          // Store conversation history for new search
+          // Store conversation history
           if (result.history && Array.isArray(result.history)) {
-            console.log('Storing new conversation history:', result.history);
+            console.log('Storing initial conversation history:', result.history);
             setConversationHistory(result.history);
           }
         }
         return result;
+      } catch (error) {
+        console.error('Search error:', error);
+        throw error;
       }
+    },
+    enabled: !!searchQuery,
+  });
 
-      const response = await fetch('/api/follow-up', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          sessionId,
-          query: followUpQuery,
-          apiKey: userApiKey || undefined,
-          history: conversationHistory, // Pass the full conversation history
-        }),
-      });
+  // Follow-up mutation using our search client service
+  const followUpMutation = useMutation({
+    mutationFn: async (followUpQuery: string) => {
+      // Get the user's API key from settings service
+      const userApiKey = settingsService.getApiKey();
       
-      if (!response.ok) {
-        if (response.status === 404) {
-          // Get the user's API key from localStorage if available for fallback
-          const apiKeyParam = userApiKey ? `&apiKey=${encodeURIComponent(userApiKey)}` : '';
+      try {
+        let result;
+        
+        // If no session exists, perform a new search
+        if (!sessionId) {
+          result = await searchClient.search(followUpQuery, userApiKey || undefined);
+          console.log('New Search API Response:', JSON.stringify(result, null, 2));
           
-          const newResponse = await fetch(`/api/search?q=${encodeURIComponent(followUpQuery)}${apiKeyParam}`);
-          if (!newResponse.ok) {
-            const errorText = await newResponse.text();
-            throw new Error(errorText || 'Search failed');
-          }
-          const result = await newResponse.json();
-          console.log('Fallback Search API Response:', JSON.stringify(result, null, 2));
           if (result.sessionId) {
             setSessionId(result.sessionId);
             setOriginalQuery(searchQuery);
             setIsFollowUp(false);
+            
+            // Store conversation history for new search
+            if (result.history && Array.isArray(result.history)) {
+              console.log('Storing new conversation history:', result.history);
+              setConversationHistory(result.history);
+            }
           }
-          return result;
+        } else {
+          // Perform follow-up query with existing session
+          result = await searchClient.followUp(
+            sessionId, 
+            followUpQuery, 
+            conversationHistory,
+            userApiKey || undefined
+          );
+          console.log('Follow-up API Response:', JSON.stringify(result, null, 2));
         }
-        throw new Error('Follow-up failed');
+        
+        return result;
+      } catch (error) {
+        console.error('Follow-up error:', error);
+        throw error;
       }
-      
-      const result = await response.json();
-      console.log('Follow-up API Response:', JSON.stringify(result, null, 2));
-      return result;
     },
     onSuccess: (result) => {
       setCurrentResults(result);
@@ -185,7 +157,8 @@ function SearchPageContent() {
       // Update conversation history with new entries
       if (result.newHistoryEntries && Array.isArray(result.newHistoryEntries)) {
         console.log('Adding new history entries:', result.newHistoryEntries);
-        setConversationHistory(prev => [...prev, ...result.newHistoryEntries]);
+        const entries: ChatHistoryEntry[] = result.newHistoryEntries;
+        setConversationHistory(prev => [...prev, ...entries]);
       }
     },
   });
@@ -215,55 +188,44 @@ function SearchPageContent() {
   useEffect(() => {
     const query = getQueryFromUrl();
     if (query && query !== searchQuery) {
-      // Check if we have saved state for this query
-      if (typeof window !== 'undefined') {
-        // Use the same localStorage key format for consistency
-        const queryLocalStorageKey = `fsearch-conversation-${query}`;
-        const savedState = localStorage.getItem(queryLocalStorageKey);
-        if (savedState) {
-          try {
-            const parsedState = JSON.parse(savedState);
-            setSessionId(parsedState.sessionId || null);
-            setCurrentResults(parsedState.currentResults || null);
-            setOriginalQuery(parsedState.originalQuery || null);
-            setIsFollowUp(parsedState.isFollowUp || false);
-            setConversationHistory(parsedState.conversationHistory || []);
-            setSearchQuery(query);
-            console.log('Loaded conversation state for new query:', parsedState);
-            return; // Don't clear state if we've loaded from localStorage
-          } catch (error) {
-            console.error('Error loading state for new query:', error);
-          }
-        }
-      }
+      // Check if we have saved state for this query using conversation manager
+      const savedState = conversationManager.loadConversationState(query);
       
-      // If no saved state or error loading, clear state
-      setSessionId(null); // Clear session on URL change
-      setOriginalQuery(null); // Clear original query
-      setIsFollowUp(false); // Reset follow-up state
-      setConversationHistory([]); // Clear conversation history on URL change
-      setSearchQuery(query);
+      if (savedState) {
+        // Load saved state
+        setSessionId(savedState.sessionId);
+        setCurrentResults(savedState.currentResults);
+        setOriginalQuery(savedState.originalQuery);
+        setIsFollowUp(savedState.isFollowUp);
+        setConversationHistory(savedState.conversationHistory);
+        setSearchQuery(query);
+        console.log('Loaded conversation state for new query:', savedState);
+      } else {
+        // If no saved state, clear state
+        setSessionId(null);
+        setOriginalQuery(null);
+        setIsFollowUp(false);
+        setConversationHistory([]);
+        setSearchQuery(query);
+      }
     }
   }, [searchParams]);
 
-  // Save state to localStorage whenever it changes
+  // Save state using conversation manager whenever it changes
   useEffect(() => {
-    if (typeof window !== 'undefined' && currentQuery && sessionId) {
-      try {
-        const stateToSave = {
-          sessionId,
-          currentResults,
-          originalQuery,
-          isFollowUp,
-          conversationHistory
-        };
-        localStorage.setItem(localStorageKey, JSON.stringify(stateToSave));
-        console.log('Saved conversation state to localStorage:', stateToSave);
-      } catch (error) {
-        console.error('Error saving state to localStorage:', error);
-      }
+    if (currentQuery && sessionId) {
+      const conversationState: ConversationState = {
+        sessionId,
+        currentResults,
+        originalQuery,
+        isFollowUp,
+        conversationHistory
+      };
+      
+      conversationManager.saveConversationState(currentQuery, conversationState);
+      console.log('Saved conversation state:', conversationState);
     }
-  }, [sessionId, currentResults, originalQuery, isFollowUp, conversationHistory, currentQuery, localStorageKey]);
+  }, [sessionId, currentResults, originalQuery, isFollowUp, conversationHistory, currentQuery]);
   
   // Use currentResults if available, otherwise fall back to data from useQuery
   const displayResults = currentResults || data;
