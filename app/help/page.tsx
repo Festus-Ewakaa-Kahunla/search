@@ -43,7 +43,7 @@ export default function HelpPage() {
                 <h3 className="text-xl font-medium text-white">Obtaining a Gemini API Key</h3>
                 <ol className="list-decimal text-gray-300 pl-5 space-y-3">
                   <li>
-                    Go to <a href="https://ai.google.dev/" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline inline-flex items-center gap-1">Google AI Studio <ExternalLink className="h-3 w-3" /></a>
+                    Go to <a href="https://aistudio.google.com/apikey/" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline inline-flex items-center gap-1">Google AI Studio <ExternalLink className="h-3 w-3" /></a>
                   </li>
                   <li>Sign in with your Google account</li>
                   <li>Navigate to the "Get API key" section</li>
