@@ -1,7 +1,7 @@
 'use client';
 
 // app/search/page.tsx - matches search-main/client/src/pages/Search.tsx
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useQuery, useMutation, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { SearchInput } from '@/components/SearchInput';
@@ -25,7 +25,9 @@ const queryClient = new QueryClient();
 export default function SearchPage() {
   return (
     <QueryClientProvider client={queryClient}>
-      <SearchPageContent />
+      <React.Suspense fallback={<div className="p-4">Loading...</div>}>
+        <SearchPageContent />
+      </React.Suspense>
     </QueryClientProvider>
   );
 }
